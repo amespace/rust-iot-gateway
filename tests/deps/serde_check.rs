@@ -23,13 +23,13 @@ struct TlcCfg {
 }
 
 // 测试serde_json
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Envelope<'a>{
     device_id: &'a str,
     ts: DateTime<Utc>,
     msg_id: uuid::Uuid,
     payload_enc: u8,
-    payload: &'a [u8]
+    // payload: &'a [u8]
 
 }
 
@@ -50,5 +50,22 @@ mod tests {
         ).unwrap();
         assert_eq!(cfg.max_frame, 64 * 1024);
         assert!(cfg.tls.is_some());
+    }
+
+    #[test]
+    fn serde_test() {
+        let env = Envelope {
+            device_id: "dev-1", 
+            ts: chrono::Utc::now(),
+            msg_id: uuid::Uuid::new_v4(),
+            payload_enc: 0x02,
+            // payload: &[0x01, 0x02,0x03]
+        };
+        // 转成字节流
+        let json = serde_json::to_vec(&env).unwrap();
+        // json 字节数据反序列化
+        let back: Envelope = serde_json::from_slice(&json).unwrap();
+
+        assert_eq!(env, back);
     }
 }

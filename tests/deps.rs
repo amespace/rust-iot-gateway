@@ -6,3 +6,6 @@ mod tokio_util_check;
 
 #[path = "deps/serde_check.rs"]
 mod serde_check;
+
+#[path ="deps/rumqttd_check.rs"]
+mod rumqttd_check;

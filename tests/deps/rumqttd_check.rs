@@ -1,24 +1,27 @@
-use rumqttc::{AsyncClient, Event, MqttOptions, QoS, Packet};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    thread::{self},
+    time::Duration,
+};
+
+use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use rumqttd::{Broker, Config, ConnectionSettings, RouterConfig, ServerSettings};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::time::Duration;
 use tokio::time::sleep;
 
-#[tokio::main]
+#[tokio::test]
 async fn main() {
-    // 1. 配置并启动 broker
-    let port: u16 = 18830;
+    let port = 18830;
     let mut cfg = Config {
         id: 0,
         router: RouterConfig {
-            max_connections: 100,
-            max_outgoing_packet_count: 200,
-            max_segment_size: 10 * 1024 * 1024,  // 10MB
+            max_connections: 100,               // 最大连接数
+            max_outgoing_packet_count: 200, // 最大出站包数， 每个连接可以缓存200个待发送的消息包
+            max_segment_size: 10 * 1024 * 1024, // 10MB
             max_segment_count: 10,
             custom_segment: None,
             initialized_filters: None,
-            shared_subscriptions_strategy: Default::default(),
+            shared_subscriptions_strategy: Default::default(), // 多个订阅者共享一个topic的分发策略
         },
         v4: None,
         v5: None,
@@ -51,20 +54,20 @@ async fn main() {
     cfg.v4 = Some(v4_servers);
 
     let mut broker = Broker::new(cfg);
-    std::thread::spawn(move || {
-        broker.start().unwrap();
-    });
+    thread::spawn(move || broker.start().unwrap());
+
     sleep(Duration::from_millis(200)).await;
     println!("Broker started on port {port}");
 
     // 2. 创建订阅者客户端
-    let mut sub_opts = MqttOptions::new("subscriber-1", "127.0.0.1", port);
-    sub_opts.set_keep_alive(Duration::from_secs(5));
-    let (sub_client, mut sub_eventloop) = AsyncClient::new(sub_opts, 10);
+    let mut mqttoptions = MqttOptions::new("subscriber-1", "127.0.0.1", port);
+    mqttoptions.set_keep_alive(Duration::from_secs(5));
+    let ( client, mut connection) = AsyncClient::new(mqttoptions, 10);
 
     tokio::spawn(async move {
         loop {
-            match sub_eventloop.poll().await {
+            match connection.poll().await {
+                // broker收到的消息
                 Ok(Event::Incoming(Packet::Publish(publish))) => {
                     println!(
                         "[Subscriber] 收到消息: topic={}, payload={}",
@@ -72,13 +75,11 @@ async fn main() {
                         String::from_utf8_lossy(&publish.payload)
                     );
                 }
-                Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                    println!("[Subscriber] 连接成功");
-                }
-                Ok(Event::Incoming(Packet::SubAck(_))) => {
-                    println!("[Subscriber] 订阅成功");
+                Ok(Event::Incoming(Packet::PubAck(_))) => {
+                    println!("[Publisher] 发布确认 (PUBACK)");
                 }
                 Ok(Event::Incoming(_)) => {}
+                // 客户端发出去的消息
                 Ok(Event::Outgoing(_)) => {}
                 Err(e) => {
                     println!("[Subscriber] 错误: {e}");
@@ -87,19 +88,20 @@ async fn main() {
             }
         }
     });
-
     sleep(Duration::from_millis(500)).await;
 
-    // 3. 订阅 topic
+    //3. 订阅topic
     let topic = "test/hello";
-    sub_client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
+    client
+        .subscribe(topic, rumqttc::QoS::AtMostOnce)
+        .await
+        .unwrap();
     sleep(Duration::from_millis(200)).await;
 
     // 4. 创建发布者客户端
     let mut pub_opts = MqttOptions::new("publisher-1", "127.0.0.1", port);
     pub_opts.set_keep_alive(Duration::from_secs(5));
     let (pub_client, mut pub_eventloop) = AsyncClient::new(pub_opts, 10);
-
     tokio::spawn(async move {
         loop {
             match pub_eventloop.poll().await {
@@ -118,19 +120,14 @@ async fn main() {
             }
         }
     });
-
     sleep(Duration::from_millis(500)).await;
-
-    // 5. 发布消息
-    let payload = "Hello MQTT from Rust!";
+    let payload = "Hello Mqtt from Rust";
     pub_client
         .publish(topic, QoS::AtMostOnce, false, payload)
         .await
         .unwrap();
+
     println!("[Publisher] 已发布: topic={topic}, payload={payload}");
-
-    // 等待消息传递
     sleep(Duration::from_secs(2)).await;
-
-    println!("\n测试完成！");
+    sleep(Duration::from_secs(2)).await;
 }
