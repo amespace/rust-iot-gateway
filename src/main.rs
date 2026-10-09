@@ -6,6 +6,7 @@ use tracing_subscriber::EnvFilter;
 use crate::config::AppConfig;
 
 mod config;
+mod error; 
 
 fn init_logging(level: &str) {
     // RUST_LOG
