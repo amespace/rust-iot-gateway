@@ -1,136 +1,41 @@
-use rumqttc::{AsyncClient, Event, MqttOptions, QoS, Packet};
-use rumqttd::{Broker, Config, ConnectionSettings, RouterConfig, ServerSettings};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::time::Duration;
-use tokio::time::sleep;
+use anyhow::Ok;
+use tokio::signal::ctrl_c;
+use tracing::info;
+use tracing_subscriber::EnvFilter;
+
+use crate::config::AppConfig;
+
+mod config;
+
+fn init_logging(level: &str) {
+    // RUST_LOG
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
+    tracing_subscriber::fmt()
+        .json()
+        .flatten_event(true)
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
+}
 
 #[tokio::main]
-async fn main() {
-    // 1. 配置并启动 broker
-    let port: u16 = 18830;
-    let mut cfg = Config {
-        id: 0,
-        router: RouterConfig {
-            max_connections: 100,
-            max_outgoing_packet_count: 200,
-            max_segment_size: 10 * 1024 * 1024,  // 10MB
-            max_segment_count: 10,
-            custom_segment: None,
-            initialized_filters: None,
-            shared_subscriptions_strategy: Default::default(),
-        },
-        v4: None,
-        v5: None,
-        ws: None,
-        cluster: None,
-        console: None,
-        bridge: None,
-        prometheus: None,
-        metrics: None,
+async fn main() -> anyhow::Result<()> {
+    let cfg = AppConfig::load("config/config.toml")?;
+    init_logging(&cfg.log_level);
+    info!("iot-gateway start, instance_id = {}", cfg.instance_id);
+    wait_for_shutdown().await;
+    Ok(())
+}
+
+// 监听Ctrl+C
+async fn wait_for_shutdown() {
+
+    // 信号
+    let ctrl_c = async {
+        ctrl_c().await.ok();
     };
-
-    let mut v4_servers = HashMap::new();
-    v4_servers.insert(
-        "v4-1".to_owned(),
-        ServerSettings {
-            name: "v4-1".to_owned(),
-            listen: format!("127.0.0.1:{port}").parse::<SocketAddr>().unwrap(),
-            tls: None,
-            next_connection_delay_ms: 1,
-            connections: ConnectionSettings {
-                connection_timeout_ms: 60000,
-                max_payload_size: 10 * 1024,
-                max_inflight_count: 10,
-                auth: None,
-                dynamic_filters: true,
-                external_auth: None,
-            },
-        },
-    );
-    cfg.v4 = Some(v4_servers);
-
-    let mut broker = Broker::new(cfg);
-    std::thread::spawn(move || {
-        broker.start().unwrap();
-    });
-    sleep(Duration::from_millis(200)).await;
-    println!("Broker started on port {port}");
-
-    // 2. 创建订阅者客户端
-    let mut sub_opts = MqttOptions::new("subscriber-1", "127.0.0.1", port);
-    sub_opts.set_keep_alive(Duration::from_secs(5));
-    let (sub_client, mut sub_eventloop) = AsyncClient::new(sub_opts, 10);
-
-    tokio::spawn(async move {
-        loop {
-            match sub_eventloop.poll().await {
-                Ok(Event::Incoming(Packet::Publish(publish))) => {
-                    println!(
-                        "[Subscriber] 收到消息: topic={}, payload={}",
-                        publish.topic,
-                        String::from_utf8_lossy(&publish.payload)
-                    );
-                }
-                Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                    println!("[Subscriber] 连接成功");
-                }
-                Ok(Event::Incoming(Packet::SubAck(_))) => {
-                    println!("[Subscriber] 订阅成功");
-                }
-                Ok(Event::Incoming(_)) => {}
-                Ok(Event::Outgoing(_)) => {}
-                Err(e) => {
-                    println!("[Subscriber] 错误: {e}");
-                    break;
-                }
-            }
-        }
-    });
-
-    sleep(Duration::from_millis(500)).await;
-
-    // 3. 订阅 topic
-    let topic = "test/hello";
-    sub_client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
-    sleep(Duration::from_millis(200)).await;
-
-    // 4. 创建发布者客户端
-    let mut pub_opts = MqttOptions::new("publisher-1", "127.0.0.1", port);
-    pub_opts.set_keep_alive(Duration::from_secs(5));
-    let (pub_client, mut pub_eventloop) = AsyncClient::new(pub_opts, 10);
-
-    tokio::spawn(async move {
-        loop {
-            match pub_eventloop.poll().await {
-                Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                    println!("[Publisher] 连接成功");
-                }
-                Ok(Event::Incoming(Packet::PubAck(_))) => {
-                    println!("[Publisher] 发布确认 (PUBACK)");
-                }
-                Ok(Event::Incoming(_)) => {}
-                Ok(Event::Outgoing(_)) => {}
-                Err(e) => {
-                    println!("[Publisher] 错误: {e}");
-                    break;
-                }
-            }
-        }
-    });
-
-    sleep(Duration::from_millis(500)).await;
-
-    // 5. 发布消息
-    let payload = "Hello MQTT from Rust!";
-    pub_client
-        .publish(topic, QoS::AtMostOnce, false, payload)
-        .await
-        .unwrap();
-    println!("[Publisher] 已发布: topic={topic}, payload={payload}");
-
-    // 等待消息传递
-    sleep(Duration::from_secs(2)).await;
-
-    println!("\n测试完成！");
+    // 并发等待宏， 这里等待ctrlC完成
+    tokio::select! {
+        _ = ctrl_c => {}
+    }
 }
