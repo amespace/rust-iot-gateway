@@ -7,6 +7,7 @@ use crate::config::AppConfig;
 mod frames;
 mod config;
 mod error; 
+mod codec;
 
 fn init_logging(level: &str) {
     // RUST_LOG
