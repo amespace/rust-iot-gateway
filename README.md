@@ -25,28 +25,15 @@ iot-gateway/
 │       ├── pdb.yaml
 │       └── servicemonitor.yaml
 │
-├── docs/
-│   ├── protocol.md                     ★ 帧格式 / 错误码 / 版本策略
-│   ├── runbook.md                      ★ 告警与处置
-│   └── capacity-plan.md                ★ 容量与资源规划
-│
-├── benches/                            ★ criterion 压测代码
-│   ├── codec.rs
-│   └── session_table.rs
-│
-├── examples/                           ★ 可执行的 demo
-│   ├── device_simulator.rs             ★ 设备模拟器
-│   └── debug_cli.rs
-│
-├── scripts/                            ★ 运维脚本（不进容器）
-│   ├── cert-gen.sh                     ★ 本地自签证书
-│   └── kafka-topics.sh                 ★ 初始化 topics
+├── scripts/                             运维脚本（不进容器）
+│   ├── cert-gen.sh                      本地自签证书
+│   └── kafka-topics.sh                  初始化 topics
 │
 ├── src/
 │   ├── main.rs                         # 二进制入口（极薄，仅 bootstrap + run）
 │   ├── lib.rs                          # 库根（集成测试和 examples 复用）
-│   ├── bootstrap.rs                    ★ 装配：创建所有组件并连线
-│   ├── shutdown.rs                     ★ SIGTERM → drain 30s → 退出
+│   ├── bootstrap.rs                     装配：创建所有组件并连线
+│   ├── shutdown.rs                      SIGTERM → drain 30s → 退出
 │   ├── error.rs                        # 顶层错误枚举（thiserror）
 │   │
 │   ├── config/                         # 配置按域分文件
@@ -130,12 +117,10 @@ iot-gateway/
 │       └── handlers.rs                 # healthz/readyz/metrics/sessions/kick/devices
 │
 └── tests/
-    ├── unit/
-    │   └── tcp_codec_test.rs           # codec 半包粘包 + proptest 模糊测试
-    ├── deps/                           ★ 依赖验证测试
+    ├── deps/                            #依赖验证测试
     │   ├── tokio_check.rs
     │   └── tokio_util_check.rs
-    ├── integration/                    ★ testcontainers 端到端
+    ├── integration/                     #testcontainers 端到端
     │   ├── kafka_roundtrip.rs
     │   ├── redis_session_route.rs
     │   └── tls_handshake.rs

@@ -1929,6 +1929,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dashmap",
+ "futures",
  "moka",
  "redis",
  "rumqttc",

@@ -4,10 +4,16 @@ use anyhow::Ok;
 use serde::{Deserialize};
 
 
-#[derive(Debug, Deserialize)]
+#[derive( Deserialize)]
 pub struct AppConfig {
     pub instance_id : String,
-    pub log_level : String
+    pub log_level : String,
+    #[serde(default = "d_tcp_addr")]
+    pub tcp_addr: String
+}
+
+fn d_tcp_addr() -> String {
+    "127.0.0.1:9000".to_string()
 }
 
 impl AppConfig {
