@@ -1938,6 +1938,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-rustls 0.26.6",
  "tokio-util",
  "toml 1.1.6+spec-1.1.0",
  "tracing",

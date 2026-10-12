@@ -9,7 +9,8 @@ pub struct AppConfig {
     pub instance_id : String,
     pub log_level : String,
     #[serde(default = "d_tcp_addr")]
-    pub tcp_addr: String
+    pub tcp_addr: String,
+    pub tls: Option<TlsConfig>
 }
 
 fn d_tcp_addr() -> String {
@@ -24,4 +25,10 @@ impl AppConfig {
         
         Ok(cfg)
     }
+}
+#[derive( Deserialize)]
+pub struct TlsConfig {
+    pub enable : bool,
+    pub cert: String, 
+    pub  key : String
 }

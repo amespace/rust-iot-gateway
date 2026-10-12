@@ -1,3 +1,8 @@
 instance_id= "gw-dev-01"
 log_level = "info"
 tcp_addr="127.0.0.1:9000"
+
+[tls]
+enable = false
+cert = "certs/server.crt"
+key = "certs/server.key"
