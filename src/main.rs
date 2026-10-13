@@ -4,12 +4,14 @@ use tokio::signal::ctrl_c;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
+// 从库中导入
+use rust_iot_gateway::codec;
 use crate::config::AppConfig;
-mod codec;
+
+// 仅 main.rs 使用的私有模块
 mod config;
-mod error;
-mod frames;
 mod server;
+mod tls;
 
 fn init_logging(level: &str) {
     // RUST_LOG
@@ -34,16 +36,44 @@ async fn main() -> anyhow::Result<()> {
         "iot-gateway 启动"
     );
 
+      // 安装 rustls 加密后端
+    tls::install_crypto_provider();
     // 跑TCP
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     let mut sr_rx = shutdown_rx.clone();
-    let server_task = tokio::spawn(async move {
-        server::serve(&tcp_addr, async move {
-            sr_rx.changed().await.ok();
-        })
-        .await
-    });
+    // let server_task = tokio::spawn(async move {
+    //     server::serve(&tcp_addr, async move {
+    //         sr_rx.changed().await.ok();
+    //     })
+    //     .await
+    // });
+     let server_task = match cfg.tls.as_ref().filter(|t| t.enable) {
+        Some(tls_cfg) => {
+            let cert = std::path::PathBuf::from(&tls_cfg.cert);
+            let key = std::path::PathBuf::from(&tls_cfg.key);
+            let provider = std::sync::Arc::new(tls::TlsProvider::from_files(&cert, &key)?);
+            // 证书热加载：每 60s 检查一次 mtime
+            provider.spawn_reload_watcher(cert.clone(), key.clone(), Duration::from_secs(60));
+            info!(cert = %cert.display(), "TLS 已启用");
+            tokio::spawn(async move {
+                server::serve_tls(&tcp_addr, provider, async move {
+                    sr_rx.changed().await.ok();
+                })
+                .await
+            })
+        }
+        None => {
+            info!("TLS 未启用，使用明文 TCP");
+            tokio::spawn(async move {
+                server::serve(&tcp_addr, async move {
+                    sr_rx.changed().await.ok();
+                })
+                .await
+            })
+        }
+    };
+
 
     wait_for_shutdown().await;
     info!("收到停机信号");
